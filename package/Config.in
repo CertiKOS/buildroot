@@ -1,4 +1,8 @@
+
+source "package/certikos-io-uring/Config.in"
+
 menu "Target packages"
+
 
 	source "package/busybox/Config.in"
 	source "package/skeleton/Config.in"
