@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <getopt.h>
 
 #include <linux/io_uring.h>
 
@@ -35,19 +36,57 @@ int io_uring_enter(int ring_fd, unsigned int to_submit,
     			 min_complete, flags, NULL, 0);
 }
 
+char *message = "Usage: io_uring_test <enclave_id> [-a IORING_SETUP_SQ_AFF] [-s size OPTIONAL RING SIZE]\n";
 
+	void
+	get_arguments(int argc, char *argv[], int *enclave_id, int *affinity_flag, int *ring_size)
+{
+	int opt;
+	while ((opt = getopt(argc, argv, "as:")) != -1) {
+		switch (opt) {
+		case 'a':
+			*affinity_flag = 1;
+			break;
+		case 's':
+			*ring_size = atoi(optarg);
+			break;
+		default:
+			printf(message);
+			exit(-1);
+		}
+	}
+
+	if (optind >= argc) {
+        printf(message);
+        exit(-1);
+	}
+
+    *enclave_id = atoi(argv[optind]);
+
+    printf("%d %d %d", *enclave_id, *affinity_flag, *ring_size);
+}
 
 int main(int argc, char *argv[])
 {
+    int enclave_id, affinity_flag, ring_size;
+
+    get_arguments(argc, argv, &enclave_id, &affinity_flag, &ring_size);
+
     struct io_uring_params p = {0};
 
     p.flags = IORING_SETUP_ENCLAVE | IORING_SETUP_SQPOLL;
+
+    if(affinity_flag)
+	    p.flags = p.flags | IORING_SETUP_SQ_AFF;
+
     p.sq_thread_idle = 120000; /* 2 minutes timeout */
-    p.resv[0] = 9; /* enclave id */
+    p.resv[0] = enclave_id; /* enclave id */
 
     printf("io_uring proxy: io_uring_setup for enclave id=%u...\n", p.resv[0]);
 
-    long ret = io_uring_setup(16, &p);
+    if (ring_size == 0) ring_size = 16;
+
+    long ret = io_uring_setup(ring_size, &p);
 
     void* rings = mmap(0, p.sq_off.array + p.sq_entries * sizeof(uint32_t),
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
