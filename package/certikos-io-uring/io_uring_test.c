@@ -63,7 +63,6 @@ char *message = "Usage: io_uring_test <enclave_id> [-a IORING_SETUP_SQ_AFF] [-s 
 
     *enclave_id = atoi(argv[optind]);
 
-    printf("%d %d %d", *enclave_id, *affinity_flag, *ring_size);
 }
 
 int main(int argc, char *argv[])
