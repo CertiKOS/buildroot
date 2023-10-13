@@ -9,6 +9,18 @@ fixup_file=fixup4.dat
 
 kernel=Image
 
+###############################
+# CERTIKOS
+###############################
+enable_gic=1
+enable_uart=1
+uart_2ndstage=1
+init_uart_clock=54000000
+init_uart_baud=115200
+armstub=bl31-certikos.bin
+kernel_address=0x10000000
+###############################
+
 # To use an external initramfs file
 #initramfs rootfs.cpio.gz
 
