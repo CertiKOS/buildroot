@@ -1,0 +1,5 @@
+config BR2_PACKAGE_IO_URING_PERF
+	bool    "io-uring-perf"
+	help
+		test
+
