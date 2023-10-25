@@ -1,0 +1,5 @@
+config BR2_PACKAGE_PERIODIC_PING
+	bool    "periodic-ping"
+	help
+		n/a
+
