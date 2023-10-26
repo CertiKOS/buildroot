@@ -11,7 +11,7 @@ define IO_URING_PERF_EXTRACT_CMDS
 endef
 
 define IO_URING_PERF_BUILD_CMDS
-	(cd $(@D); $(TARGET_CC) -Wall -Os -s io_uring_echo.c -o io_uring_echo)
+	(cd $(@D); $(TARGET_CC) -Wall -Os -luring -s io_uring_echo.c -o io_uring_echo)
 endef
 
 define IO_URING_PERF_INSTALL_TARGET_CMDS
