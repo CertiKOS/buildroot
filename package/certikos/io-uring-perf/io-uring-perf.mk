@@ -5,6 +5,7 @@
 ################################################################################
 
 IO_URING_PERF_LICENSE = Public Domain
+IO_URING_PERF_DEPENDENCIES = liburing
 
 define IO_URING_PERF_EXTRACT_CMDS
 	cp package/certikos/io-uring-perf/io_uring_echo.c $(@D)/

@@ -5,6 +5,7 @@
 ################################################################################
 
 RINGLEADER_PROXY_LICENSE = Public Domain
+RINGLEADER_PROXY_DEPENDENCIES = liburing
 
 define RINGLEADER_PROXY_EXTRACT_CMDS
 	cp package/certikos/ringleader-proxy/proxy.c $(@D)/
