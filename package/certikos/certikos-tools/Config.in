@@ -1,0 +1,5 @@
+config BR2_PACKAGE_CERTIKOS_TOOLS
+	bool    "certikos_tools"
+	help
+		test
+

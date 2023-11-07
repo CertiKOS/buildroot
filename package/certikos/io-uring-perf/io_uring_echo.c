@@ -16,6 +16,8 @@
 #include <linux/io_uring.h>
 #include <liburing.h>
 
+#include <certikos/profile.h>
+
 #define READ_COOKIE     (1)
 #define WRITE_COOKIE    (2)
 #define READ_MAX_SIZE   (1024 * 1024)

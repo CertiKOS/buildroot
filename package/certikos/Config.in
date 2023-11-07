@@ -1,4 +1,5 @@
 menu "CertiKOS, PARTEE, and RingLeader Packages"
+	source "package/certikos/certikos-tools/Config.in"
 	source "package/certikos/ringleader-proxy/Config.in"
 	source "package/certikos/periodic-ping/Config.in"
 	source "package/certikos/io-uring-perf/Config.in"
