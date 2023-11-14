@@ -20,46 +20,63 @@
 
 #define READ_COOKIE     (1)
 #define WRITE_COOKIE    (2)
-#define READ_MAX_SIZE   (1024 * 1024)
 
-int io_uring_setup(unsigned entries, struct io_uring_params *p)
+inline uint64_t pmccntr_el0()
 {
-    return (int) syscall(__NR_io_uring_setup, entries, p);
+    uint64_t val=0;
+    asm volatile("mrs %0, pmccntr_el0" : "=r" (val));
+    return val;
 }
 
-int io_uring_enter(int ring_fd, unsigned int to_submit,
-                   unsigned int min_complete, unsigned int flags)
+
+inline uint64_t cntvct_el0()
 {
-    return (int) syscall(__NR_io_uring_enter, ring_fd, to_submit,
-        min_complete, flags, NULL, 0);
+    uint64_t val=0;
+    asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+    return val;
 }
 
-char *message = "Usage: io_uring_test <enclave_id> [-a IORING_SETUP_SQ_AFF] [-s size OPTIONAL RING SIZE]\n";
+#define tsc()       cntvct_el0()
+#define cycles()    pmccntr_el0()
 
-    void
-    get_arguments(int argc, char *argv[], int *enclave_id, int *affinity_flag, int *ring_size)
+int in_fd = STDIN_FILENO;
+
+char *message = "Usage: %s [-a SQ_POLLING_AFFINITY] [-s RING_SIZE] [-b BLOCK_SIZE]\n";
+
+void
+get_arguments(int argc,
+              char *argv[],
+              int *sq_affinity,
+              uint32_t *min_ring_size,
+              size_t *block_size)
 {
     int opt;
-    while ((opt = getopt(argc, argv, "as:")) != -1) {
+    while ((opt = getopt(argc, argv, "a:s:b:")) != -1) {
         switch (opt) {
         case 'a':
-            *affinity_flag = 1;
+            *sq_affinity = atoi(optarg);
             break;
         case 's':
-            *ring_size = atoi(optarg);
+            *min_ring_size = atoi(optarg);
             break;
+        case 'b':
+            *block_size = atoi(optarg);
         default:
-            printf(message);
+            fprintf(stderr, message, argv[0]);
             exit(-1);
         }
     }
 
-    if (optind >= argc) {
-        printf(message);
-        exit(-1);
+    if(optind == argc - 1)
+    {
+        in_fd = open(argv[optind], O_RDONLY);
+        if(in_fd < 0)
+        {
+            perror("failed to open input file");
+            exit(errno);
+        }
     }
 
-    *enclave_id = atoi(argv[optind]);
 
 }
 
@@ -71,12 +88,20 @@ int main(int argc, char *argv[])
     struct io_uring_params p = {0};
     struct io_uring_sqe * sqe;
     struct io_uring_cqe * cqe;
-    size_t min_entries = 16;
+    uint32_t min_entries = 16;
     int affinity = -1;
+    size_t block_size = 1024 * 64;
+
+    get_arguments(argc, argv, &affinity, &min_entries, &block_size);
+
+    volatile uint64_t start_time = time();
 
     /* scenario variables */
-    static char block[1024*1024];
+    char *block = malloc(block_size);
+    memset(block, 0, block_size); /* Trigger all page faults, warm cache */
+
     size_t read_size = 0;
+    size_t write_size = 0;
 
 
     p.flags = IORING_SETUP_SQPOLL;
@@ -103,7 +128,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    io_uring_prep_read(sqe, STDIN_FILENO, block, READ_MAX_SIZE, 0);
+    io_uring_prep_read(sqe, in_fd, block, block_size, 0);
     io_uring_sqe_set_data(sqe, (void*)READ_COOKIE);
 
     ret = io_uring_submit(&ring);
@@ -131,13 +156,13 @@ int main(int argc, char *argv[])
                         return 1;
                     }
 
-                    io_uring_prep_write(sqe, STDOUT_FILENO, block, read_size, 0);
+                    io_uring_prep_write(sqe, STDOUT_FILENO, block, read_size, -1);
                     io_uring_sqe_set_data(sqe, (void*)WRITE_COOKIE);
 
                     ret = io_uring_submit(&ring);
                     if (ret < 1)
                     {
-                        fprintf(stderr, "io_uring_submit read (%zu) error %i\n", read_size, ret);
+                        fprintf(stderr, "io_uring_submit after read (%zu) error %i\n", read_size, ret);
                         return 1;
                     }
 
@@ -149,14 +174,20 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
+                    uint64_t volatile end_time = time();
+                    fprintf(stderr, "time=%lu %s\n", end_time - start_time,
+                        time_unit());
+                    io_uring_queue_exit(&ring);
                     return 0;
                 }
                 break;
 
 
             case WRITE_COOKIE:
-                if(cqe->res == read_size)
+                if(cqe->res >= 0)
                 {
+                    write_size += cqe->res;
+
                     sqe = io_uring_get_sqe(&ring);
                     if(!sqe)
                     {
@@ -164,19 +195,31 @@ int main(int argc, char *argv[])
                         return 1;
                     }
 
-                    io_uring_prep_read(sqe, STDIN_FILENO, block, read_size, 0);
-                    io_uring_sqe_set_data(sqe, (void*)READ_COOKIE);
+                    if(write_size == read_size)
+                    {
+                        write_size = 0;
+                        io_uring_prep_read(sqe, in_fd, block, block_size, -1);
+                        io_uring_sqe_set_data(sqe, (void*)READ_COOKIE);
+                    }
+                    else
+                    {
+                        io_uring_prep_write(sqe, STDOUT_FILENO,
+                                block+write_size, read_size-write_size, -1);
+                        io_uring_sqe_set_data(sqe, (void*)WRITE_COOKIE);
+                    }
+
 
                     ret = io_uring_submit(&ring);
                     if (ret < 1)
                     {
-                        fprintf(stderr, "io_uring_submit write error %i\n", ret);
+                        fprintf(stderr, "io_uring_submit after write error %i\n", ret);
                         return 1;
                     }
                 }
                 else
                 {
-                    fprintf(stderr, "write failed %i\n", cqe->res);
+                    fprintf(stderr, "write failed %i bytes, expected %zi\n",
+                            cqe->res, read_size);
                     return cqe->res;
                 }
                 break;
