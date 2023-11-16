@@ -41,7 +41,8 @@ inline uint64_t cntvct_el0()
 
 int in_fd = STDIN_FILENO;
 
-char *message = "Usage: %s [-a SQ_POLLING_AFFINITY] [-s RING_SIZE] [-b BLOCK_SIZE]\n";
+char *message =
+    "Usage: %s [-a SQ_POLLING_AFFINITY] [-s RING_SIZE] [-b BLOCK_SIZE]\n";
 
 void
 get_arguments(int argc,
@@ -162,14 +163,14 @@ int main(int argc, char *argv[])
                     ret = io_uring_submit(&ring);
                     if (ret < 1)
                     {
-                        fprintf(stderr, "io_uring_submit after read (%zu) error %i\n", read_size, ret);
+                        fprintf(stderr, "submit read error: %i\n", ret);
                         return 1;
                     }
 
                 }
                 else if(cqe->res < 0)
                 {
-                    fprintf(stderr, "read: %s\n", strerror(-cqe->res));
+                    fprintf(stderr, "read failed: %s\n", strerror(-cqe->res));
                     return cqe->res;
                 }
                 else
@@ -212,21 +213,24 @@ int main(int argc, char *argv[])
                     ret = io_uring_submit(&ring);
                     if (ret < 1)
                     {
-                        fprintf(stderr, "io_uring_submit after write error %i\n", ret);
+                        fprintf(stderr, "submit write error: %i\n", ret);
                         return 1;
                     }
                 }
                 else
                 {
-                    fprintf(stderr, "write failed %i bytes, expected %zi\n",
-                            cqe->res, read_size);
+                    fprintf(stderr, "write failed: %s\n", strerror(-cqe->res));
                     return cqe->res;
                 }
                 break;
+            default:
+                fprintf(stderr, "Unknown cookie\n");
+                return 1;
             }
 
             io_uring_cqe_seen(&ring, cqe);
         }
+
     }
 
     io_uring_queue_exit(&ring);

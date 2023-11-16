@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdatomic.h>
 #include <getopt.h>
+#include <poll.h>
 
 #include <linux/io_uring.h>
 
@@ -33,33 +34,36 @@ int io_uring_enter(int ring_fd, unsigned int to_submit,
                    unsigned int min_complete, unsigned int flags)
 {
     return (int) syscall(__NR_io_uring_enter, ring_fd, to_submit,
-    			 min_complete, flags, NULL, 0);
+                 min_complete, flags, NULL, 0);
 }
 
-char *message = "Usage: io_uring_test <enclave_id> [-a IORING_SETUP_SQ_AFF] [-s size OPTIONAL RING SIZE]\n";
+char *message = "Usage: io_uring_test <enclave_id> "
+                "[-a IORING_SETUP_SQ_AFF] "
+                "[-s size OPTIONAL RING SIZE]\n";
 
-	void
-	get_arguments(int argc, char *argv[], int *enclave_id, int *affinity_flag, int *ring_size)
+void
+get_arguments(int argc, char *argv[], int *enclave_id, int *affinity_flag,
+            int *ring_size)
 {
-	int opt;
-	while ((opt = getopt(argc, argv, "as:")) != -1) {
-		switch (opt) {
-		case 'a':
-			*affinity_flag = 1;
-			break;
-		case 's':
-			*ring_size = atoi(optarg);
-			break;
-		default:
-			printf(message);
-			exit(-1);
-		}
-	}
+    int opt;
+    while ((opt = getopt(argc, argv, "as:")) != -1) {
+        switch (opt) {
+        case 'a':
+            *affinity_flag = 1;
+            break;
+        case 's':
+            *ring_size = atoi(optarg);
+            break;
+        default:
+            printf(message);
+            exit(-1);
+        }
+    }
 
-	if (optind >= argc) {
+    if (optind >= argc) {
         printf(message);
         exit(-1);
-	}
+    }
 
     *enclave_id = atoi(argv[optind]);
 
@@ -67,53 +71,80 @@ char *message = "Usage: io_uring_test <enclave_id> [-a IORING_SETUP_SQ_AFF] [-s 
 
 int main(int argc, char *argv[])
 {
-    int enclave_id, affinity_flag, ring_size;
+    int enclave_id;
+    int affinity_flag = 0;
+    int ring_size = 16;
+    char cmd_str[64];
+    struct io_uring_params p = {0};
+
 
     get_arguments(argc, argv, &enclave_id, &affinity_flag, &ring_size);
 
-    struct io_uring_params p = {0};
+    int cmd_pipe_fds[2];
+    if(pipe(cmd_pipe_fds))
+    {
+        perror("control pipe failed");
+        return EXIT_FAILURE;
+    }
 
+
+    //TODO iouring
+    (void)fcntl(cmd_pipe_fds[0], F_SETFD,
+            fcntl(cmd_pipe_fds[0], F_GETFD) | O_CLOEXEC);
+    (void)fcntl(cmd_pipe_fds[1], F_SETFD,
+            fcntl(cmd_pipe_fds[1], F_GETFD) | O_CLOEXEC);
+
+    p.resv[0] = enclave_id; /* enclave id */
+    p.resv[1] = cmd_pipe_fds[1]; /* Give enclave write end of exit pipe */
+    p.sq_thread_idle = 120000; /* 2 minutes timeout */
     p.flags = IORING_SETUP_ENCLAVE | IORING_SETUP_SQPOLL;
 
     if(affinity_flag)
-	    p.flags = p.flags | IORING_SETUP_SQ_AFF;
+        p.flags = p.flags | IORING_SETUP_SQ_AFF;
 
-    p.sq_thread_idle = 120000; /* 2 minutes timeout */
-    p.resv[0] = enclave_id; /* enclave id */
+    fprintf(stderr, "%s (%i): starting enclave id=%u...\n",
+            argv[0], getpid(), p.resv[0]);
+    fprintf(stderr, "%s (%i): cmd_pipe_fds[]=%i, %i\n", argv[0], getpid(),
+            cmd_pipe_fds[0], cmd_pipe_fds[1]);
 
-    printf("io_uring proxy: io_uring_setup for enclave id=%u...\n", p.resv[0]);
+    long ring_fd = io_uring_setup(ring_size, &p);
 
-    if (ring_size == 0) ring_size = 16;
+    io_uring_enter(ring_fd, 0, 0, IORING_ENTER_SQ_WAKEUP);
 
-    long ret = io_uring_setup(ring_size, &p);
+    while(1)
+    {
+        memset(cmd_str, '\0', sizeof(cmd_str));
+        ssize_t cmd_str_size = read(cmd_pipe_fds[0], cmd_str,
+            sizeof(cmd_str) - 1);
 
-    void* rings = mmap(0, p.sq_off.array + p.sq_entries * sizeof(uint32_t),
-        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
-        ret, IORING_OFF_SQ_RING);
-    void* sqes = mmap(0, p.sq_entries * sizeof(struct io_uring_sqe),
-        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
-        ret, IORING_OFF_SQES);
-
-    (void)sqes;
-
-    void * sq_ptr = rings;
-    //void * cq_ptr = rings;
-    //uint32_t *sring_head = sq_ptr + p.sq_off.tail;
-    //uint32_t *sring_tail = sq_ptr + p.sq_off.tail;
-    uint32_t *sring_flags = sq_ptr + p.sq_off.flags;
-
-    //uint32_t *cring_head = cq_ptr + p.cq_off.head;
-    //uint32_t *cring_tail = cq_ptr + p.cq_off.tail;
-    //uint32_t *sring_mask = sq_ptr + p.sq_off.mask;
-    //uint32_t *sring_array = sq_ptr + p.sq_off.array;
-
-    while(1) {
-        if(io_uring_smp_load_acquire(sring_flags) & IORING_SQ_NEED_WAKEUP)
+        if(cmd_str_size > 0)
         {
-            printf("io_uring proxy: waking up sleeping sq thread\n");
-            io_uring_enter(ret, 0, 0, IORING_ENTER_SQ_WAKEUP);
+            const char exit_cmd[] = "exit: ";
+            const char wake_cmd[] = "wake";
+
+            if(strncmp(exit_cmd, cmd_str, sizeof(exit_cmd)-1) == 0)
+            {
+                /* read exit code from pipe */
+                return atoi(cmd_str + sizeof(exit_cmd));
+            }
+            else if(strncmp(wake_cmd, cmd_str, sizeof(wake_cmd)) == 0)
+            {
+                io_uring_enter(ring_fd, 0, 0, IORING_ENTER_SQ_WAKEUP);
+            }
+            else
+            {
+                fprintf(stderr, "unknown command \"%s\"\n", cmd_str);
+                return EXIT_FAILURE;
+            }
         }
-        sleep(1);
-    };
-    return 0;
+        else
+        {
+            perror("exit read failed");
+            return EXIT_FAILURE;
+        }
+    }
+
+
+
+
 }
