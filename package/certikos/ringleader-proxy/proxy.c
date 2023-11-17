@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
             if(strncmp(exit_cmd, cmd_str, sizeof(exit_cmd)-1) == 0)
             {
                 /* read exit code from pipe */
-                return atoi(cmd_str + sizeof(exit_cmd));
+                return atoi(cmd_str + sizeof(exit_cmd)-1);
             }
             else if(strncmp(wake_cmd, cmd_str, sizeof(wake_cmd)) == 0)
             {
