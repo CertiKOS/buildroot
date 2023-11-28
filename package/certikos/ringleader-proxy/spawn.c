@@ -25,7 +25,7 @@ int main(int argc, char *argv[], char *envp[])
 
     /* params */
     char *enclave_name;
-    int affinity_flag = 0;
+    int sq_poll_affinity = -1;
     uint32_t min_entries = 16;
     int partition_id = 5;
     int period = 2;
@@ -76,6 +76,11 @@ int main(int argc, char *argv[], char *envp[])
         quota_pages = atoi(env);
     }
 
+    if((env = getenv("ENCLAVE_SQPOLL_CPU")) != NULL)
+    {
+        sq_poll_affinity = atoi(env);
+    }
+
 
     enclave_name = argv[1];
     //TODO getenv affinity, min_entries, quota, RT-PARAMS
@@ -87,18 +92,21 @@ int main(int argc, char *argv[], char *envp[])
     }
 
     //TODO iouring (don't need to GETFD because CLOEXEC is the only option
-    (void)fcntl(cmd_pipe_fds[0], F_SETFD, O_CLOEXEC);
-    (void)fcntl(cmd_pipe_fds[1], F_SETFD, O_CLOEXEC);
+    //(void)fcntl(cmd_pipe_fds[0], F_SETFD, O_CLOEXEC);
+    //(void)fcntl(cmd_pipe_fds[1], F_SETFD, O_CLOEXEC);
 
 
     p.sq_thread_idle = 120000; /* 2 minutes timeout */
     p.flags = IORING_SETUP_SQPOLL;
 
-    if(affinity_flag)
+    if(sq_poll_affinity >= 0)
+    {
         p.flags = p.flags | IORING_SETUP_SQ_AFF;
+        p.sq_thread_cpu = sq_poll_affinity;
+    }
 
-    fprintf(stderr, "%s (%i): starting enclave \"%s\"...\n",
-            argv[0], getpid(), enclave_name);
+    //fprintf(stderr, "%s (%i): starting enclave \"%s\"...\n",
+    //        argv[0], getpid(), enclave_name);
 
     ret = io_uring_queue_init_params(min_entries, &ring, &p);
     if(ret < 0)
