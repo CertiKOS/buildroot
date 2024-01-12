@@ -1,6 +1,0 @@
-config BR2_PACKAGE_IO_URING_PERF
-	bool    "io-uring-perf"
-	select BR2_PACKAGE_LIBURING
-	help
-		test
-

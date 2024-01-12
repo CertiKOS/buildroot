@@ -1,6 +1,0 @@
-config BR2_PACKAGE_RINGLEADER_PROXY
-	bool    "ringleader-proxy"
-	select BR2_PACKAGE_LIBURING
-	help
-		test
-
