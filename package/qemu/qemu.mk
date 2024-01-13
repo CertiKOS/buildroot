@@ -6,8 +6,10 @@
 
 # When updating the version, check whether the list of supported targets
 # needs to be updated.
-QEMU_VERSION=ae
-QEMU_SITE=https://github.com/columbia/osdi23-paper114-qemu.git
+#QEMU_VERSION=ae
+#QEMU_SITE=https://github.com/columbia/osdi23-paper114-qemu.git
+QEMU_VERSION=v4.2.1-rpi4
+QEMU_SITE=https://vspells.ext.bbn.com/yale/refuel-cee-verihyp-qemu.git
 QEMU_SITE_METHOD=git
 QEMU_GIT_SUBMODULES=YES
 QEMU_LICENSE = GPL-2.0, LGPL-2.1, MIT, BSD-3-Clause, BSD-2-Clause, Others/BSD-1c
