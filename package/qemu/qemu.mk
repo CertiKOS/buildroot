@@ -6,24 +6,15 @@
 
 # When updating the version, check whether the list of supported targets
 # needs to be updated.
-#QEMU_VERSION=ae
-#QEMU_SITE=https://github.com/columbia/osdi23-paper114-qemu.git
-QEMU_VERSION=v4.2.1-rpi4
-QEMU_SITE=https://vspells.ext.bbn.com/yale/refuel-cee-verihyp-qemu.git
-QEMU_SITE_METHOD=git
-QEMU_GIT_SUBMODULES=YES
+QEMU_VERSION = 8.0.3
+QEMU_SOURCE = qemu-$(QEMU_VERSION).tar.xz
+QEMU_SITE = https://download.qemu.org
 QEMU_LICENSE = GPL-2.0, LGPL-2.1, MIT, BSD-3-Clause, BSD-2-Clause, Others/BSD-1c
 QEMU_LICENSE_FILES = COPYING COPYING.LIB
 # NOTE: there is no top-level license file for non-(L)GPL licenses;
 #       the non-(L)GPL license texts are specified in the affected
 #       individual source files.
 QEMU_CPE_ID_VENDOR = qemu
-
-define QEMU_EXTRACT_CMDS
-	cp -r $(BR2_DL_DIR)/qemu/git/* $(@D)
-endef
-
-PYTHON2_PATH=/usr/bin/python2
 
 #-------------------------------------------------------------
 
@@ -32,7 +23,9 @@ PYTHON2_PATH=/usr/bin/python2
 
 # Target-qemu
 QEMU_DEPENDENCIES = \
+	host-meson \
 	host-pkgconf \
+	host-python3 \
 	libglib2 \
 	zlib
 
@@ -138,6 +131,12 @@ endif
 QEMU_OPTS += --target-list="$(QEMU_TARGET_LIST)"
 endif
 
+ifeq ($(BR2_TOOLCHAIN_USES_UCLIBC),y)
+QEMU_OPTS += --disable-vhost-user
+else
+QEMU_OPTS += --enable-vhost-user
+endif
+
 ifeq ($(BR2_PACKAGE_QEMU_SLIRP),y)
 QEMU_OPTS += --enable-slirp
 QEMU_DEPENDENCIES += slirp
@@ -157,7 +156,7 @@ ifeq ($(BR2_PACKAGE_QEMU_FDT),y)
 QEMU_OPTS += --enable-fdt
 QEMU_DEPENDENCIES += dtc
 else
-QEMU_OPTS += --disable-ft
+QEMU_OPTS += --disable-fdt
 endif
 
 ifeq ($(BR2_PACKAGE_QEMU_TOOLS),y)
@@ -172,11 +171,25 @@ else
 QEMU_OPTS += --disable-guest-agent
 endif
 
+ifeq ($(BR2_PACKAGE_LIBFUSE3),y)
+QEMU_OPTS += --enable-fuse --enable-fuse-lseek
+QEMU_DEPENDENCIES += libfuse3
+else
+QEMU_OPTS += --disable-fuse --disable-fuse-lseek
+endif
+
 ifeq ($(BR2_PACKAGE_LIBSECCOMP),y)
 QEMU_OPTS += --enable-seccomp
 QEMU_DEPENDENCIES += libseccomp
 else
 QEMU_OPTS += --disable-seccomp
+endif
+
+ifeq ($(BR2_PACKAGE_LIBSSH),y)
+QEMU_OPTS += --enable-libssh
+QEMU_DEPENDENCIES += libssh
+else
+QEMU_OPTS += --disable-libssh
 endif
 
 ifeq ($(BR2_PACKAGE_LIBUSB),y)
@@ -207,6 +220,13 @@ else
 QEMU_OPTS += --disable-vnc
 endif
 
+ifeq ($(BR2_PACKAGE_NETTLE),y)
+QEMU_OPTS += --enable-nettle
+QEMU_DEPENDENCIES += nettle
+else
+QEMU_OPTS += --disable-nettle
+endif
+
 ifeq ($(BR2_PACKAGE_NUMACTL),y)
 QEMU_OPTS += --enable-numa
 QEMU_DEPENDENCIES += numactl
@@ -232,6 +252,12 @@ ifeq ($(BR2_STATIC_LIBS),y)
 QEMU_OPTS += --static
 endif
 
+ifeq ($(BR2_PACKAGE_QEMU_BLOBS),y)
+QEMU_OPTS += --enable-install-blobs
+else
+QEMU_OPTS += --disable-install-blobs
+endif
+
 # Override CPP, as it expects to be able to call it like it'd
 # call the compiler.
 define QEMU_CONFIGURE_CMDS
@@ -246,26 +272,49 @@ define QEMU_CONFIGURE_CMDS
 			--prefix=/usr \
 			--cross-prefix=$(TARGET_CROSS) \
 			--audio-drv-list= \
+			--meson=$(HOST_DIR)/bin/meson \
+			--ninja=$(HOST_DIR)/bin/ninja \
+			--disable-alsa \
+			--disable-bpf \
 			--disable-brlapi \
 			--disable-bsd-user \
 			--disable-cap-ng \
+			--disable-capstone \
+			--disable-containers \
+			--disable-coreaudio \
 			--disable-curl \
 			--disable-curses \
+			--disable-dbus-display \
 			--disable-docs \
+			--disable-dsound \
+			--disable-hvf \
+			--disable-jack \
 			--disable-libiscsi \
 			--disable-linux-aio \
+			--disable-linux-io-uring \
+			--disable-malloc-trim \
+			--disable-membarrier \
+			--disable-mpath \
 			--disable-netmap \
 			--disable-opengl \
+			--disable-oss \
+			--disable-pa \
 			--disable-rbd \
+			--disable-sanitizers \
+			--disable-selinux \
 			--disable-sparse \
 			--disable-strip \
 			--disable-vde \
+			--disable-vhost-crypto \
+			--disable-vhost-user-blk-server \
+			--disable-virtfs \
+			--disable-whpx \
 			--disable-xen \
-			--disable-werror \
 			--enable-attr \
 			--enable-kvm \
 			--enable-vhost-net \
-			--python=$(PYTHON2_PATH) \
+			--with-git-submodules=ignore \
+			--disable-hexagon-idef-parser \
 			$(QEMU_OPTS)
 endef
 
