@@ -1,0 +1,3 @@
+config BR2_PACKAGE_HOST_PYTHON_FUTURE
+	bool "host python-future"
+	help
