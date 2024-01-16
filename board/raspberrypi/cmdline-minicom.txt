@@ -1,0 +1,1 @@
+dwc_otg.lpm_enable=0 root=/dev/mmcblk1p2 rootwait console=tty1 earlycon=uart8250,mmio32,0xfe215040 console=ttyS1,115200n8

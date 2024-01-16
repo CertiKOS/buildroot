@@ -13,4 +13,3 @@ fi
 # exnsure overlays exists for genimage
 mkdir -p "${BINARIES_DIR}/rpi-firmware/overlays"
 
-ln -f -s "${CERTIKOS_EL3_FIRMWARE}" "${BINARIES_DIR}/rpi-firmware/bl31-certikos.bin"
